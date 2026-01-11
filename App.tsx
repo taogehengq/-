@@ -7,27 +7,35 @@ import WishModal from './components/WishModal';
 import RantModal from './components/RantModal';
 import Confetti from './components/Confetti';
 import AdminPanel from './components/AdminPanel';
+import TagSphere from './components/TagSphere';
 
 export default function App() {
-  // 1. 初始化完整状态
   const [state, setState] = useState<AppState>(loadState());
   const [drawing, setDrawing] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [currentName, setCurrentName] = useState('READY');
   const [winner, setWinner] = useState<any>(null);
   
-  // UI 控制状态
   const [modals, setModals] = useState({ wish: false, rant: false, admin: false, win: false });
 
-  // 2. 自动保存状态
   useEffect(() => {
     saveState(state);
   }, [state]);
 
-  // 3. 计算当前抽奖池
   const currentPrize = useMemo(() => {
     return state.prizes.find(p => p.id === state.currentPrizeId) || state.prizes[0];
   }, [state.prizes, state.currentPrizeId]);
+
+  // Calculate winner count for each prize
+  const prizeWinnerCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    state.winners.forEach(w => {
+      counts[w.prizeId] = (counts[w.prizeId] || 0) + 1;
+    });
+    return counts;
+  }, [state.winners]);
+
+  const isCurrentPrizeFull = (prizeWinnerCounts[currentPrize.id] || 0) >= currentPrize.count;
 
   const drawingPool = useMemo(() => {
     if (currentPrize.type === 'wish') return state.wishes.filter(w => !w.isWon).map(w => ({ id: w.id, text: w.text }));
@@ -35,7 +43,6 @@ export default function App() {
     return state.participants.filter(p => !p.isWon).map(p => ({ id: p.id, text: p.name }));
   }, [state, currentPrize]);
 
-  // 4. 抽奖滚动逻辑
   useEffect(() => {
     let timer: number;
     if (drawing || stopping) {
@@ -48,25 +55,25 @@ export default function App() {
     return () => clearInterval(timer);
   }, [drawing, stopping, drawingPool]);
 
-  // 5. 抽奖核心动作
   const handleToggleDraw = () => {
+    if (isCurrentPrizeFull && !drawing) {
+      alert(`该奖项 [${currentPrize.name}] 已抽完！`);
+      return;
+    }
     if (!drawingPool.length && !drawing) return alert("当前奖池已抽完或为空！");
 
     if (drawing) {
       setDrawing(false);
       setStopping(true);
       
-      // 模拟一点延迟停顿感
       setTimeout(() => {
         setStopping(false);
-        // 查找必中逻辑
         const rigged = state.participants.find(p => p.isRigged && !p.isWon && currentPrize.type === 'standard');
         const luckyItem = rigged ? { id: rigged.id, text: rigged.name } : drawingPool.find(i => i.text === currentName) || drawingPool[0];
         
         setCurrentName(luckyItem.text);
         setWinner(luckyItem);
 
-        // 更新状态：标记已中奖
         setState(s => ({
           ...s,
           participants: s.participants.map(p => p.id === luckyItem.id ? { ...p, isWon: true } : p),
@@ -94,6 +101,13 @@ export default function App() {
     <div className="relative h-screen w-screen flex flex-col items-center justify-center overflow-hidden bg-[#020617] text-white">
       <div className="bg-glow" />
       
+      {/* 3D Background Sphere */}
+      <TagSphere 
+        items={drawingPool.map(i => ({ id: i.id, text: i.text, color: currentPrize.color }))} 
+        isDrawing={drawing} 
+        isStopping={stopping}
+      />
+      
       {/* 顶部标题栏 */}
       <div className="absolute top-10 left-10 flex items-center gap-4 z-20">
         <div className="glass p-3 rounded-2xl border-cyan-500/30">
@@ -107,34 +121,45 @@ export default function App() {
 
       {/* 右上角功能区 */}
       <div className="absolute top-10 right-10 flex gap-3 z-20">
-        <button onClick={() => setModals(m => ({...m, wish: true}))} className="glass w-12 h-12 rounded-xl flex items-center justify-center text-yellow-400 hover:scale-110 transition-all border-yellow-500/20"><Sparkles size={20}/></button>
-        <button onClick={() => setModals(m => ({...m, rant: true}))} className="glass w-12 h-12 rounded-xl flex items-center justify-center text-pink-400 hover:scale-110 transition-all border-pink-500/20"><MessageSquareOff size={20}/></button>
-        <button onClick={() => setModals(m => ({...m, admin: true}))} className="glass w-12 h-12 rounded-xl flex items-center justify-center text-cyan-400 hover:scale-110 transition-all border-cyan-500/20"><Settings size={20}/></button>
+        <button onClick={() => setModals(m => ({...m, wish: true}))} title="许愿" className="glass w-12 h-12 rounded-xl flex items-center justify-center text-yellow-400 hover:scale-110 transition-all border-yellow-500/20"><Sparkles size={20}/></button>
+        <button onClick={() => setModals(m => ({...m, rant: true}))} title="吐槽" className="glass w-12 h-12 rounded-xl flex items-center justify-center text-pink-400 hover:scale-110 transition-all border-pink-500/20"><MessageSquareOff size={20}/></button>
+        <button onClick={() => setModals(m => ({...m, admin: true}))} title="设置" className="glass w-12 h-12 rounded-xl flex items-center justify-center text-cyan-400 hover:scale-110 transition-all border-cyan-500/20"><Settings size={20}/></button>
       </div>
 
       {/* 奖项切换器 */}
       <div className="absolute top-32 flex gap-2 glass p-1.5 rounded-full z-20 max-w-[90vw] overflow-x-auto no-scrollbar">
-        {state.prizes.map(p => (
-          <button 
-            key={p.id}
-            onClick={() => setState(s => ({ ...s, currentPrizeId: p.id }))}
-            className={`px-6 py-2 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all ${state.currentPrizeId === p.id ? 'bg-cyan-600 text-white shadow-lg' : 'opacity-40 hover:opacity-100 hover:bg-white/5'}`}
-          >
-            {p.name}
-          </button>
-        ))}
+        {state.prizes.map(p => {
+          const winCount = prizeWinnerCounts[p.id] || 0;
+          return (
+            <button 
+              key={p.id}
+              onClick={() => setState(s => ({ ...s, currentPrizeId: p.id }))}
+              className={`px-5 py-2.5 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all flex items-center gap-2 whitespace-nowrap ${state.currentPrizeId === p.id ? 'bg-cyan-600 text-white shadow-lg' : 'opacity-40 hover:opacity-100 hover:bg-white/5'}`}
+            >
+              <span>{p.name}</span>
+              <span className={`px-2 py-0.5 rounded-full text-[8px] ${state.currentPrizeId === p.id ? 'bg-white/20' : 'bg-black/20 text-gray-400'}`}>
+                {winCount}/{p.count}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
       {/* 主抽奖区 */}
       <div className="relative z-10 flex flex-col items-center">
-        <div className="glass rounded-[4rem] p-16 w-[32rem] text-center border-white/5 shadow-2xl relative overflow-hidden">
+        <div className="glass rounded-[4rem] p-16 w-[34rem] text-center border-white/5 shadow-2xl relative overflow-hidden">
           <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-cyan-500 to-transparent opacity-50" />
           
-          <div className="text-[10px] font-black tracking-[0.5em] text-cyan-500/60 uppercase mb-8">
-            Now Drawing: {currentPrize.name}
+          <div className="flex justify-between items-center mb-8 px-4">
+             <div className="text-[10px] font-black tracking-[0.5em] text-cyan-500/60 uppercase">
+                Drawing: {currentPrize.name}
+             </div>
+             <div className="text-[10px] font-black text-white/30 uppercase tracking-widest">
+                Pool Size: {drawingPool.length}
+             </div>
           </div>
           
-          <div className="h-40 flex items-center justify-center">
+          <div className="h-44 flex items-center justify-center">
             <h2 className={`text-7xl font-black transition-all duration-75 ${drawing ? 'scale-110 blur-[1px]' : 'scale-100'}`}>
               {currentName}
             </h2>
@@ -142,11 +167,11 @@ export default function App() {
 
           <button 
             onClick={handleToggleDraw}
-            disabled={stopping}
-            className={`mt-12 w-full py-6 rounded-[2rem] font-black text-xl uppercase tracking-[0.3em] transition-all transform active:scale-95 flex items-center justify-center gap-4 ${drawing ? 'bg-red-600 shadow-[0_0_40px_rgba(220,38,38,0.3)]' : 'bg-cyan-600 shadow-[0_0_40px_rgba(8,145,178,0.3)] hover:scale-105'} disabled:opacity-50`}
+            disabled={stopping || (isCurrentPrizeFull && !drawing)}
+            className={`mt-12 w-full py-6 rounded-[2rem] font-black text-xl uppercase tracking-[0.3em] transition-all transform active:scale-95 flex items-center justify-center gap-4 ${isCurrentPrizeFull && !drawing ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : drawing ? 'bg-red-600 shadow-[0_0_40px_rgba(220,38,38,0.3)]' : 'bg-cyan-600 shadow-[0_0_40px_rgba(8,145,178,0.3)] hover:scale-105'}`}
           >
-            {drawing ? <Square fill="currentColor" size={24}/> : <Play fill="currentColor" size={24}/>}
-            {drawing ? 'Stop' : 'Draw'}
+            {isCurrentPrizeFull && !drawing ? <Trophy size={24} className="opacity-40" /> : drawing ? <Square fill="currentColor" size={24}/> : <Play fill="currentColor" size={24}/>}
+            {isCurrentPrizeFull && !drawing ? 'Completed' : drawing ? 'Stop' : 'Draw'}
           </button>
         </div>
       </div>
@@ -171,12 +196,12 @@ export default function App() {
 
       {/* 弹窗组件 */}
       {modals.wish && <WishModal onClose={() => setModals(m=>({...m, wish: false}))} onSubmit={(txt) => {
-        setState(s => ({ ...s, wishes: [...s.wishes, { id: Date.now().toString(), text: txt, color: '#06b6d4' }] }));
+        setState(s => ({ ...s, wishes: [...s.wishes, { id: Date.now().toString(), text: txt, color: '#06b6d4', isWon: false }] }));
         setModals(m=>({...m, wish: false}));
       }} />}
       
       {modals.rant && <RantModal onClose={() => setModals(m=>({...m, rant: false}))} onSubmit={(txt) => {
-        setState(s => ({ ...s, rants: [...s.rants, { id: Date.now().toString(), text: txt, timestamp: Date.now() }] }));
+        setState(s => ({ ...s, rants: [...s.rants, { id: Date.now().toString(), text: txt, timestamp: Date.now(), isWon: false }] }));
         setModals(m=>({...m, rant: false}));
       }} />}
       
