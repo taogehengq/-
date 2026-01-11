@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NeonSphere Draw 2025 - Lite</title>
+    <title>NeonSphere Draw 2025 - Professional</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;900&family=Noto+Sans+SC:wght@300;700&display=swap" rel="stylesheet">
     <style>
@@ -12,8 +12,39 @@
         .font-orbitron { font-family: 'Orbitron', sans-serif; }
         .glass { background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); }
         .neon-text { text-shadow: 0 0 10px rgba(34, 211, 238, 0.8), 0 0 20px rgba(34, 211, 238, 0.4); }
-        @keyframes pulse-slow { 0%, 100% { opacity: 0.3; } 50% { opacity: 0.6; } }
-        .bg-glow { position: absolute; width: 100vw; height: 100vh; background: radial-gradient(circle at center, #083344 0%, #020617 70%); z-index: -1; }
+        
+        /* 炫彩背景动画 */
+        .bg-colorful {
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(125deg, #020617 0%, #0f172a 30%, #1e1b4b 60%, #020617 100%);
+            z-index: -2;
+        }
+        .bg-blobs {
+            position: absolute;
+            inset: 0;
+            overflow: hidden;
+            z-index: -1;
+            filter: blur(80px);
+            opacity: 0.4;
+        }
+        .blob {
+            position: absolute;
+            width: 50vw;
+            height: 50vw;
+            border-radius: 50%;
+            animation: move 20s infinite alternate;
+        }
+        .blob-1 { background: #06b6d4; top: -10%; left: -10%; animation-delay: 0s; }
+        .blob-2 { background: #ec4899; bottom: -10%; right: -10%; animation-delay: -5s; }
+        .blob-3 { background: #8b5cf6; top: 40%; left: 30%; animation-delay: -10s; }
+
+        @keyframes move {
+            from { transform: translate(0, 0) scale(1); }
+            to { transform: translate(10vw, 10vh) scale(1.2); }
+        }
+
+        .no-scrollbar::-webkit-scrollbar { display: none; }
     </style>
     <script type="importmap">
 {

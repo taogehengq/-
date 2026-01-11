@@ -8,11 +8,14 @@ import RantModal from './components/RantModal';
 import Confetti from './components/Confetti';
 import AdminPanel from './components/AdminPanel';
 import TagSphere from './components/TagSphere';
+import { WishEffect, VolcanoEffect } from './components/SpecialEffects';
 
 export default function App() {
   const [state, setState] = useState<AppState>(loadState());
   const [drawing, setDrawing] = useState(false);
   const [stopping, setStopping] = useState(false);
+  const [isZooming, setIsZooming] = useState(false); 
+  const [isSwitching, setIsSwitching] = useState(false); // 奖池切换状态
   const [currentName, setCurrentName] = useState('READY');
   const [winner, setWinner] = useState<any>(null);
   
@@ -26,7 +29,6 @@ export default function App() {
     return state.prizes.find(p => p.id === state.currentPrizeId) || state.prizes[0];
   }, [state.prizes, state.currentPrizeId]);
 
-  // Calculate winner count for each prize
   const prizeWinnerCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     state.winners.forEach(w => {
@@ -47,10 +49,14 @@ export default function App() {
     let timer: number;
     if (drawing || stopping) {
       timer = window.setInterval(() => {
-        if (!drawingPool.length) return setCurrentName('池子已空');
+        if (!drawingPool.length) {
+          setDrawing(false);
+          setStopping(false);
+          return setCurrentName('池子已空');
+        }
         const randomIndex = Math.floor(Math.random() * drawingPool.length);
         setCurrentName(drawingPool[randomIndex].text);
-      }, stopping ? 150 : 50);
+      }, stopping ? 80 : 40);
     }
     return () => clearInterval(timer);
   }, [drawing, stopping, drawingPool]);
@@ -65,7 +71,6 @@ export default function App() {
     if (drawing) {
       setDrawing(false);
       setStopping(true);
-      
       setTimeout(() => {
         setStopping(false);
         const rigged = state.participants.find(p => p.isRigged && !p.isWon && currentPrize.type === 'standard');
@@ -90,22 +95,48 @@ export default function App() {
         }));
         
         setModals(m => ({ ...m, win: true }));
-      }, 1000);
+      }, 250);
     } else {
       setWinner(null);
       setDrawing(true);
     }
   };
 
+  const handleConfirmWin = () => {
+    setModals(m => ({ ...m, win: false }));
+    setCurrentName('READY');
+    setIsZooming(true);
+    setTimeout(() => setIsZooming(false), 1000);
+  };
+
+  const handleSwitchPrize = (id: string) => {
+    if(drawing || stopping) return;
+    setIsSwitching(true);
+    setState(s => ({ ...s, currentPrizeId: id }));
+    setCurrentName('READY');
+    setTimeout(() => setIsSwitching(false), 600);
+  };
+
   return (
-    <div className="relative h-screen w-screen flex flex-col items-center justify-center overflow-hidden bg-[#020617] text-white">
-      <div className="bg-glow" />
+    <div className={`relative h-screen w-screen flex flex-col items-center justify-center overflow-hidden text-white transition-all duration-500 ${isSwitching ? 'brightness-150 scale-105' : ''}`}>
+      {/* 炫彩背景 */}
+      <div className="bg-colorful" />
+      <div className="bg-blobs">
+        <div className="blob blob-1" />
+        <div className="blob blob-2" />
+        <div className="blob blob-3" />
+      </div>
       
-      {/* 3D Background Sphere */}
+      {/* 特殊场景特效 */}
+      {currentPrize.type === 'wish' && <WishEffect />}
+      {currentPrize.type === 'rant' && <VolcanoEffect />}
+      
+      {/* 3D 球体 */}
       <TagSphere 
         items={drawingPool.map(i => ({ id: i.id, text: i.text, color: currentPrize.color }))} 
         isDrawing={drawing} 
         isStopping={stopping}
+        isZoomedIn={isZooming || modals.win || isSwitching}
       />
       
       {/* 顶部标题栏 */}
@@ -114,7 +145,7 @@ export default function App() {
           <Trophy className="text-cyan-400" size={24} />
         </div>
         <div>
-          <h1 className="text-2xl font-black font-orbitron neon-text">{state.appName}</h1>
+          <h1 className="text-2xl font-black font-orbitron neon-text leading-tight">{state.appName}</h1>
           <p className="text-[10px] tracking-[0.4em] text-cyan-500/50 uppercase">{state.appSubName}</p>
         </div>
       </div>
@@ -127,14 +158,14 @@ export default function App() {
       </div>
 
       {/* 奖项切换器 */}
-      <div className="absolute top-32 flex gap-2 glass p-1.5 rounded-full z-20 max-w-[90vw] overflow-x-auto no-scrollbar">
+      <div className="absolute top-32 flex gap-2 glass p-1.5 rounded-full z-20 max-w-[90vw] overflow-x-auto no-scrollbar shadow-2xl">
         {state.prizes.map(p => {
           const winCount = prizeWinnerCounts[p.id] || 0;
           return (
             <button 
               key={p.id}
-              onClick={() => setState(s => ({ ...s, currentPrizeId: p.id }))}
-              className={`px-5 py-2.5 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all flex items-center gap-2 whitespace-nowrap ${state.currentPrizeId === p.id ? 'bg-cyan-600 text-white shadow-lg' : 'opacity-40 hover:opacity-100 hover:bg-white/5'}`}
+              onClick={() => handleSwitchPrize(p.id)}
+              className={`px-5 py-2.5 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all flex items-center gap-2 whitespace-nowrap ${state.currentPrizeId === p.id ? 'bg-cyan-600 text-white shadow-lg scale-105' : 'opacity-40 hover:opacity-100 hover:bg-white/5'}`}
             >
               <span>{p.name}</span>
               <span className={`px-2 py-0.5 rounded-full text-[8px] ${state.currentPrizeId === p.id ? 'bg-white/20' : 'bg-black/20 text-gray-400'}`}>
@@ -146,49 +177,49 @@ export default function App() {
       </div>
 
       {/* 主抽奖区 */}
-      <div className="relative z-10 flex flex-col items-center">
-        <div className="glass rounded-[4rem] p-16 w-[34rem] text-center border-white/5 shadow-2xl relative overflow-hidden">
-          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-cyan-500 to-transparent opacity-50" />
+      <div className="absolute bottom-24 z-10 flex flex-col items-center animate-in fade-in slide-in-from-bottom duration-700">
+        <div className={`glass rounded-[3rem] p-10 w-[30rem] text-center border-white/5 shadow-2xl relative overflow-hidden transition-all duration-500 ${drawing ? 'opacity-100 scale-100 shadow-[0_0_50px_rgba(255,255,255,0.05)]' : 'opacity-40 scale-95'}`}>
+          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-cyan-500 to-transparent opacity-20" />
           
-          <div className="flex justify-between items-center mb-8 px-4">
-             <div className="text-[10px] font-black tracking-[0.5em] text-cyan-500/60 uppercase">
-                Drawing: {currentPrize.name}
+          <div className="flex justify-between items-center mb-4 px-4">
+             <div className="text-[10px] font-black tracking-[0.4em] text-cyan-500/30 uppercase">
+                {currentPrize.name}
              </div>
-             <div className="text-[10px] font-black text-white/30 uppercase tracking-widest">
-                Pool Size: {drawingPool.length}
+             <div className="text-[10px] font-black text-white/10 uppercase tracking-widest">
+                POOL: {drawingPool.length}
              </div>
           </div>
           
-          <div className="h-44 flex items-center justify-center">
-            <h2 className={`text-7xl font-black transition-all duration-75 ${drawing ? 'scale-110 blur-[1px]' : 'scale-100'}`}>
+          <div className="h-20 flex items-center justify-center">
+            <h2 className={`text-3xl font-black transition-all duration-75 tracking-tight ${drawing ? 'scale-110 blur-[1px] text-white' : 'scale-100 text-white/80'}`}>
               {currentName}
             </h2>
           </div>
 
           <button 
             onClick={handleToggleDraw}
-            disabled={stopping || (isCurrentPrizeFull && !drawing)}
-            className={`mt-12 w-full py-6 rounded-[2rem] font-black text-xl uppercase tracking-[0.3em] transition-all transform active:scale-95 flex items-center justify-center gap-4 ${isCurrentPrizeFull && !drawing ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : drawing ? 'bg-red-600 shadow-[0_0_40px_rgba(220,38,38,0.3)]' : 'bg-cyan-600 shadow-[0_0_40px_rgba(8,145,178,0.3)] hover:scale-105'}`}
+            disabled={stopping || isSwitching || (isCurrentPrizeFull && !drawing)}
+            className={`mt-6 w-full py-4 rounded-[1.5rem] font-black text-base uppercase tracking-[0.3em] transition-all transform active:scale-95 flex items-center justify-center gap-4 ${isCurrentPrizeFull && !drawing ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : drawing ? 'bg-red-600/80 shadow-[0_0_30px_rgba(220,38,38,0.2)]' : 'bg-cyan-600/80 shadow-[0_0_30px_rgba(8,145,178,0.2)] hover:bg-cyan-600 hover:scale-105'}`}
           >
-            {isCurrentPrizeFull && !drawing ? <Trophy size={24} className="opacity-40" /> : drawing ? <Square fill="currentColor" size={24}/> : <Play fill="currentColor" size={24}/>}
+            {isCurrentPrizeFull && !drawing ? <Trophy size={18} className="opacity-40" /> : drawing ? <Square fill="currentColor" size={18}/> : <Play fill="currentColor" size={18}/>}
             {isCurrentPrizeFull && !drawing ? 'Completed' : drawing ? 'Stop' : 'Draw'}
           </button>
         </div>
       </div>
 
       {/* 底部吐槽跑马灯 */}
-      <div className="absolute bottom-0 w-full h-12 bg-black/40 backdrop-blur-md border-t border-white/5 flex items-center overflow-hidden z-20">
+      <div className="absolute bottom-0 w-full h-12 bg-black/10 backdrop-blur-md border-t border-white/5 flex items-center overflow-hidden z-20">
         <div className="flex whitespace-nowrap animate-marquee">
           {state.rants.length > 0 ? (
             state.rants.concat(state.rants).map((r, i) => (
-              <span key={i} className="mx-12 text-[11px] font-bold text-pink-400/70 tracking-widest flex items-center gap-3">
-                <span className="w-1.5 h-1.5 rounded-full bg-pink-500/40" />
+              <span key={i} className="mx-12 text-[11px] font-bold text-pink-400/50 tracking-widest flex items-center gap-3">
+                <span className="w-1.5 h-1.5 rounded-full bg-pink-500/20" />
                 匿名吐槽: {r.text}
               </span>
             ))
           ) : (
-            <span className="mx-12 text-[11px] font-bold text-gray-500 uppercase tracking-widest">
-              等待第一条匿名吐槽... 点击右上角图标开始
+            <span className="mx-12 text-[11px] font-bold text-gray-500/20 uppercase tracking-widest">
+              等待第一条匿名吐槽...
             </span>
           )}
         </div>
@@ -209,13 +240,18 @@ export default function App() {
 
       {/* 中奖揭晓 */}
       {modals.win && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-xl animate-in fade-in duration-500 p-6">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-3xl animate-in fade-in duration-300 p-6">
           <Confetti />
-          <div className="text-center space-y-8 animate-in zoom-in duration-300">
-             <p className="text-cyan-400 font-black tracking-[0.5em] text-sm uppercase">Congratulations</p>
-             <h3 className="text-4xl font-bold opacity-60">恭喜获得 {currentPrize.name}</h3>
-             <h2 className="text-[10rem] font-black italic neon-text leading-none">{winner?.text}</h2>
-             <button onClick={() => setModals(m=>({...m, win: false}))} className="px-16 py-4 bg-white text-black rounded-full font-black uppercase tracking-widest hover:bg-cyan-400 transition-colors">Continue</button>
+          <div className="text-center space-y-8 animate-in zoom-in duration-500">
+             <p className="text-cyan-400 font-black tracking-[0.5em] text-xs uppercase opacity-80">Congratulations</p>
+             <h3 className="text-2xl font-bold opacity-50">恭喜获得 {currentPrize.name}</h3>
+             <h2 className="text-[10rem] font-black italic neon-text leading-none animate-bounce">{winner?.text}</h2>
+             <button 
+              onClick={handleConfirmWin} 
+              className="px-16 py-4 bg-white text-black rounded-full font-black uppercase tracking-widest hover:bg-cyan-400 transition-all hover:scale-110 active:scale-95 shadow-2xl"
+             >
+               Confirm & Return
+             </button>
           </div>
         </div>
       )}
@@ -226,9 +262,8 @@ export default function App() {
           100% { transform: translateX(-50%); }
         }
         .animate-marquee {
-          animation: marquee 40s linear infinite;
+          animation: marquee 50s linear infinite;
         }
-        .no-scrollbar::-webkit-scrollbar { display: none; }
       `}</style>
     </div>
   );

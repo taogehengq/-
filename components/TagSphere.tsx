@@ -2,9 +2,14 @@
 import React, { useEffect, useRef } from 'react';
 
 interface DisplayItem { id: string; text: string; color: string; }
-interface TagSphereProps { items: DisplayItem[]; isDrawing: boolean; isStopping?: boolean; highlightedId?: string; }
+interface TagSphereProps { 
+  items: DisplayItem[]; 
+  isDrawing: boolean; 
+  isStopping?: boolean; 
+  isZoomedIn?: boolean; // 新增：是否处于特写状态
+}
 
-const TagSphere: React.FC<TagSphereProps> = ({ items, isDrawing, isStopping, highlightedId }) => {
+const TagSphere: React.FC<TagSphereProps> = ({ items, isDrawing, isStopping, isZoomedIn }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sphereItems = useRef<{ x: number, y: number, z: number, text: string, color: string, id: string }[]>([]);
   const frameRef = useRef<number | undefined>(undefined);
@@ -12,9 +17,10 @@ const TagSphere: React.FC<TagSphereProps> = ({ items, isDrawing, isStopping, hig
   const angleX = useRef(0.002);
   const angleY = useRef(0.002);
   const targetAngle = useRef(0.002);
+  const currentZOffset = useRef(0); // 用于缩放效果的偏移
 
   useEffect(() => {
-    targetAngle.current = isDrawing ? 0.12 : isStopping ? 0.04 : 0.002;
+    targetAngle.current = isDrawing ? 0.08 : isStopping ? 0.02 : 0.002;
   }, [isDrawing, isStopping]);
 
   useEffect(() => {
@@ -23,7 +29,6 @@ const TagSphere: React.FC<TagSphereProps> = ({ items, isDrawing, isStopping, hig
     const resize = () => { cvs.width = window.innerWidth; cvs.height = window.innerHeight; };
     window.addEventListener('resize', resize); resize();
 
-    // 如果没有数据，显示一些随机的光点作为背景
     const displayData = items.length > 0 ? items : Array.from({length: 40}, (_, i) => ({ id: `bg-${i}`, text: '·', color: 'rgba(34,211,238,0.2)' }));
     const radius = Math.min(cvs.width, cvs.height) * 0.35;
     const count = displayData.length;
@@ -48,6 +53,10 @@ const TagSphere: React.FC<TagSphereProps> = ({ items, isDrawing, isStopping, hig
       angleX.current += (targetAngle.current - angleX.current) * 0.05;
       angleY.current += (targetAngle.current - angleY.current) * 0.05;
 
+      // 缩放逻辑：isZoomedIn 时 Z 轴靠近，否则远离
+      const targetZOffset = isZoomedIn ? 400 : 0;
+      currentZOffset.current += (targetZOffset - currentZOffset.current) * 0.05;
+
       const cX = Math.cos(angleX.current), sX = Math.sin(angleX.current);
       const cY = Math.cos(angleY.current), sY = Math.sin(angleY.current);
 
@@ -59,21 +68,21 @@ const TagSphere: React.FC<TagSphereProps> = ({ items, isDrawing, isStopping, hig
 
         item.x = x1; item.y = y1; item.z = z2;
 
-        const p = 600 / (600 + z2);
+        // 透视投影公式
+        const depth = z2 + 800 - currentZOffset.current;
+        const p = 600 / Math.max(1, depth);
+        
         const sX_scr = cx + x1 * p, sY_scr = cy + y1 * p;
-        const active = item.id === highlightedId;
         
         ctx.save();
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        if (active) {
-          ctx.font = `bold ${40 * p}px 'Orbitron'`;
-          ctx.shadowBlur = 15; ctx.shadowColor = '#fff';
-          ctx.fillStyle = '#fff'; ctx.globalAlpha = 1;
-        } else {
-          ctx.font = `${14 * p}px 'Noto Sans SC'`;
-          ctx.fillStyle = item.color;
-          ctx.globalAlpha = Math.max(0.1, (radius - z2) / (radius * 2)) * 0.6;
-        }
+        ctx.font = `${14 * p}px 'Noto Sans SC'`;
+        ctx.fillStyle = item.color;
+        
+        // 透明度根据距离变化
+        const alpha = Math.max(0.05, (radius - z2) / (radius * 2));
+        ctx.globalAlpha = alpha * (isZoomedIn ? 0.3 : 0.8);
+        
         ctx.fillText(item.text, sX_scr, sY_scr);
         ctx.restore();
       });
@@ -82,7 +91,7 @@ const TagSphere: React.FC<TagSphereProps> = ({ items, isDrawing, isStopping, hig
 
     animate();
     return () => { cancelAnimationFrame(frameRef.current!); window.removeEventListener('resize', resize); };
-  }, [items, highlightedId]);
+  }, [items, isZoomedIn]);
 
   return <canvas ref={canvasRef} className="fixed inset-0 pointer-events-none z-0" />;
 };
